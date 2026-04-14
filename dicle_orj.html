@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dicle için</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: radial-gradient(ellipse at 40% 40%, #1c1c1e 0%, #111112 40%, #0a0a0b 100%);
+  display:flex; align-items:center; justify-content:center;
+  min-height:100vh; overflow:hidden; font-family:Georgia,serif;
+}
+canvas { position:fixed; top:0; left:0; }
+#ui {
+  position:relative; z-index:10; text-align:center; user-select:none;
+}
+#heartSvg {
+  width:160px; height:160px; display:block; margin:0 auto;
+  cursor:pointer;
+  animation:hb 1.1s ease-in-out infinite;
+  filter:drop-shadow(0 0 28px #cc0000bb);
+  transition:width .45s cubic-bezier(.3,1.8,.4,1), height .45s cubic-bezier(.3,1.8,.4,1);
+}
+@keyframes hb {
+  0%,100%{transform:scale(1)} 15%{transform:scale(1.18)} 30%{transform:scale(1)} 45%{transform:scale(1.12)} 60%{transform:scale(1)}
+}
+#heartSvg.boom { animation:boom .6s ease-in forwards!important; }
+@keyframes boom {
+  0%{transform:scale(1);opacity:1} 50%{transform:scale(1.7);opacity:1} 100%{transform:scale(0);opacity:0}
+}
+#hint {
+  margin-top:28px; font-size:20px; font-weight:bold;
+  color:#ff4444; letter-spacing:2px;
+  text-shadow:0 0 14px #ff0000, 0 0 28px #ff000066;
+  animation:bl 2s ease-in-out infinite; transition:opacity .4s;
+}
+@keyframes bl { 0%,100%{opacity:.55} 50%{opacity:1} }
+#flash {
+  position:fixed; inset:0; background:#cc0000; opacity:0;
+  pointer-events:none; z-index:50; transition:opacity .08s;
+}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="flash"></div>
+<div id="ui">
+  <svg id="heartSvg" viewBox="0 0 100 90" xmlns="http://www.w3.org/2000/svg" onclick="onClick()">
+    <defs>
+      <radialGradient id="hg" cx="50%" cy="35%" r="65%">
+        <stop offset="0%" stop-color="#ff3333"/>
+        <stop offset="100%" stop-color="#880000"/>
+      </radialGradient>
+    </defs>
+    <path d="M50 85 C50 85 5 55 5 28 C5 14 16 5 28 5 C36 5 44 10 50 18 C56 10 64 5 72 5 C84 5 95 14 95 28 C95 55 50 85 50 85Z" fill="url(#hg)" stroke="#cc0000" stroke-width="0.5"/>
+    <path d="M30 22 C26 22 22 26 22 32" stroke="#ff8888" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.45"/>
+  </svg>
+  <div id="hint">kalbe dokun ✨</div>
+</div>
+
+<script>
+const cv = document.getElementById('cv');
+const cx = cv.getContext('2d');
+const svg = document.getElementById('heartSvg');
+const hint = document.getElementById('hint');
+const flash = document.getElementById('flash');
+
+let W = cv.width  = window.innerWidth;
+let H = cv.height = window.innerHeight;
+window.addEventListener('resize', () => { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; });
+
+const sizes = [160,210,265,325,390,460,535,615,700,800];
+const hints = [
+  'kalbe dokun ✨',
+  'bir daha 💕',
+  'devam et... 💗',
+  'büyüyor... 💓',
+  'neredeyse... 💘',
+  'çok yakın! ❤️',
+  'biraz daha... 🔥',
+  'dur durma! 💥',
+  'nefesini tut... 😮',
+  'son kez! 💣'
+];
+let clicks = 0;
+let exploded = false;
+
+/* ---- floating ambient hearts ---- */
+const floaters = [];
+function spawnFloat() {
+  const s = Math.random()*9+4;
+  floaters.push({
+    x: Math.random()*W, y: H + 20,
+    vx: (Math.random()-.5)*1.2,
+    vy: -(Math.random()*1.5+0.8),
+    s, alpha:1,
+    color:`hsl(${Math.random()*30+345},100%,${Math.random()*18+48}%)`,
+    rot:Math.random()*Math.PI*2,
+    rotV:(Math.random()-.5)*.04
+  });
+}
+setInterval(() => { if(!exploded) spawnFloat(); }, 220);
+
+/* ---- explosion hearts ---- */
+const exHearts = [];
+function spawnEx(x,y,big) {
+  const s = big?(Math.random()*28+14):(Math.random()*10+4);
+  const a = Math.random()*Math.PI*2;
+  const sp = big?(Math.random()*9+5):(Math.random()*3+1);
+  exHearts.push({
+    x,y,
+    vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-(big?6:2),
+    s, alpha:1,
+    color:`hsl(${Math.random()*30+345},100%,${Math.random()*18+48}%)`,
+    rot:Math.random()*Math.PI*2,
+    rotV:(Math.random()-.5)*.16,
+    fade:big?.006:.013
+  });
+}
+
+/* ---- text particles ---- */
+const tParts = [];
+let forming = false;
+
+function getLetterPoints(text, fontSize) {
+  const oc = document.createElement('canvas');
+  oc.width  = Math.min(W*.95,1000);
+  oc.height = fontSize*2.2;
+  const c = oc.getContext('2d');
+  c.fillStyle = '#fff';
+  c.font = `bold ${fontSize}px Georgia,serif`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(text, oc.width/2, fontSize);
+  const d = c.getImageData(0,0,oc.width,oc.height).data;
+  const step = Math.max(5, Math.floor(fontSize/14));
+  const pts = [];
+  for (let y=0; y<oc.height; y+=step)
+    for (let x=0; x<oc.width; x+=step)
+      if (d[(y*oc.width+x)*4+3]>128) pts.push({x,y});
+  return {pts, w:oc.width, h:oc.height};
+}
+
+function buildTextParticles() {
+  const fontSize = Math.min(W*.22, 160);
+  const {pts,w,h} = getLetterPoints('DİCLE', fontSize);
+  const ox = W/2 - w/2;
+  const oy = H/2 - h/2;
+
+  tParts.length = 0;
+  /* shuffle so they arrive in random order not left-to-right */
+  const shuffled = pts.slice().sort(()=>Math.random()-.5);
+
+  shuffled.forEach((p, i) => {
+    const tx = ox + p.x;
+    const ty = oy + p.y;
+    /* start scattered around screen */
+    const angle = Math.random()*Math.PI*2;
+    const dist  = Math.random()*Math.max(W,H)*.65 + 250;
+    tParts.push({
+      x: W/2 + Math.cos(angle)*dist,
+      y: H/2 + Math.sin(angle)*dist,
+      tx, ty,
+      /* heart appearance */
+      heartSize: Math.random()*14+8,
+      /* target: small glowing dot/circle */
+      targetR: Math.random()*3.5+2,
+      color:`hsl(${Math.random()*20+0},100%,${Math.random()*18+44}%)`,
+      alpha:0,
+      /* very slow easing — yildiz gibi */
+      speed: Math.random()*0.018 + 0.007,
+      delay: i*1.2 + Math.random()*40,   /* stagger in frames */
+      rot: Math.random()*Math.PI*2,
+      rotV:(Math.random()-.5)*.18,
+      /* morph 0=heart 1=dot */
+      morph:0,
+      arrived:false,
+      twinkle:Math.random()*Math.PI*2,
+      twinkleSpd:Math.random()*.05+.02
+    });
+  });
+  forming = true;
+}
+
+/* ---- draw helpers ---- */
+function heartPath(c, x, y, s) {
+  c.beginPath();
+  for(let i=0;i<=60;i++){
+    const t=(i/60)*Math.PI*2;
+    const px=s*16*Math.pow(Math.sin(t),3)*0.06;
+    const py=-s*(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))*0.06;
+    i===0?c.moveTo(x+px,y+py):c.lineTo(x+px,y+py);
+  }
+  c.closePath();
+}
+
+function drawHeart(c,x,y,s,alpha,color,rot) {
+  c.save();
+  c.translate(x,y); c.rotate(rot);
+  c.globalAlpha=alpha; c.fillStyle=color;
+  heartPath(c,0,0,s);
+  c.fill(); c.restore();
+}
+
+function drawGlowDot(c,x,y,r,alpha,color) {
+  c.save();
+  c.globalAlpha=alpha;
+  c.shadowBlur=10; c.shadowColor=color;
+  c.fillStyle=color;
+  c.beginPath(); c.arc(x,y,r,0,Math.PI*2); c.fill();
+  c.restore();
+}
+
+/* ---- main loop ---- */
+let frame=0;
+function loop() {
+  cx.clearRect(0,0,W,H);
+  /* metalik arka planı canvas'a da çiz ki transparan kalmasın */
+  const bg = cx.createRadialGradient(W*.4,H*.4,0,W*.5,H*.5,Math.max(W,H)*.75);
+  bg.addColorStop(0,'#1c1c1e'); bg.addColorStop(.4,'#111112'); bg.addColorStop(1,'#0a0a0b');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  frame++;
+
+  /* ambient floaters */
+  for(let i=floaters.length-1;i>=0;i--){
+    const p=floaters[i];
+    p.x+=p.vx; p.y+=p.vy; p.alpha-=.004; p.rot+=p.rotV;
+    if(p.y<-30||p.alpha<=0){floaters.splice(i,1);continue;}
+    drawHeart(cx,p.x,p.y,p.s,p.alpha,p.color,p.rot);
+  }
+
+  /* explosion hearts */
+  for(let i=exHearts.length-1;i>=0;i--){
+    const p=exHearts[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=.08;
+    p.alpha-=p.fade; p.rot+=p.rotV;
+    if(p.alpha<=0){exHearts.splice(i,1);continue;}
+    drawHeart(cx,p.x,p.y,p.s,p.alpha,p.color,p.rot);
+  }
+
+  /* text forming particles */
+  if(forming){
+    tParts.forEach(p=>{
+      if(frame < p.delay) return;
+      /* fade in */
+      if(p.alpha<1) p.alpha=Math.min(1,p.alpha+.025);
+
+      if(!p.arrived){
+        p.x+=(p.tx-p.x)*p.speed;
+        p.y+=(p.ty-p.y)*p.speed;
+        p.rot+=p.rotV;
+        const d=Math.hypot(p.tx-p.x,p.ty-p.y);
+        /* morph from heart to dot as it gets close */
+        p.morph = Math.max(0, 1 - d/80);
+        if(d<1.5){p.x=p.tx;p.y=p.ty;p.arrived=true;p.morph=1;}
+      }
+
+      p.twinkle+=p.twinkleSpd;
+      const twAlpha = p.alpha*(0.65+0.35*Math.sin(p.twinkle));
+
+      if(p.morph<0.5){
+        /* still looks like a heart */
+        const hs = p.heartSize*(1-p.morph*1.5);
+        drawHeart(cx,p.x,p.y,Math.max(1,hs),twAlpha,p.color,p.arrived?0:p.rot);
+      } else {
+        /* morphed into glowing dot */
+        drawGlowDot(cx,p.x,p.y,p.targetR,twAlpha,p.color);
+      }
+    });
+  }
+
+  requestAnimationFrame(loop);
+}
+loop();
+
+/* ---- click handler ---- */
+function onClick(){
+  if(exploded) return;
+  const mcx=W/2, mcy=H/2;
+
+  if(clicks < sizes.length-1){
+    clicks++;
+    svg.style.width  = sizes[clicks]+'px';
+    svg.style.height = sizes[clicks]+'px';
+    hint.textContent = hints[clicks];
+    for(let i=0;i<12+clicks*8;i++) spawnEx(mcx,mcy,false);
+  } else {
+    exploded=true;
+    svg.style.pointerEvents='none';
+    hint.style.opacity='0';
+    svg.classList.add('boom');
+
+    setTimeout(()=>{
+      for(let i=0;i<200;i++) spawnEx(mcx,mcy,true);
+      for(let i=0;i<100;i++) spawnEx(mcx,mcy,false);
+      flash.style.opacity='.45';
+      setTimeout(()=>flash.style.opacity='0',180);
+      svg.style.display='none';
+      hint.style.display='none';
+
+      setTimeout(()=>{
+        buildTextParticles();
+        setInterval(()=>{
+          spawnEx(mcx+(Math.random()-.5)*W, mcy+(Math.random()-.5)*H, Math.random()>.4);
+        },100);
+      },500);
+    },550);
+  }
+}
+</script>
+</body>
+</html>
