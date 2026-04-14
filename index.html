@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dicle için</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: radial-gradient(ellipse at 40% 40%, #1c1c1e 0%, #111112 40%, #0a0a0b 100%);
+  display:flex; align-items:center; justify-content:center;
+  min-height:100vh; overflow:hidden; font-family:Georgia,serif;
+}
+canvas { position:fixed; top:0; left:0; }
+#ui { position:relative; z-index:10; text-align:center; user-select:none; }
+#heartSvg {
+  width:160px; height:160px; display:block; margin:0 auto; cursor:pointer;
+  animation:hb 1.1s ease-in-out infinite;
+  filter:drop-shadow(0 0 28px #cc0000bb);
+  transition:width .45s cubic-bezier(.3,1.8,.4,1), height .45s cubic-bezier(.3,1.8,.4,1);
+}
+@keyframes hb {
+  0%,100%{transform:scale(1)} 15%{transform:scale(1.18)} 30%{transform:scale(1)} 45%{transform:scale(1.12)} 60%{transform:scale(1)}
+}
+#heartSvg.boom { animation:boom .6s ease-in forwards!important; }
+@keyframes boom { 0%{transform:scale(1);opacity:1} 50%{transform:scale(1.7)} 100%{transform:scale(0);opacity:0} }
+#hint {
+  margin-top:28px; font-size:20px; font-weight:bold;
+  color:#ff4444; letter-spacing:2px;
+  text-shadow:0 0 14px #ff0000,0 0 28px #ff000066;
+  animation:bl 2s ease-in-out infinite; transition:opacity .4s;
+}
+@keyframes bl { 0%,100%{opacity:.55} 50%{opacity:1} }
+#flash { position:fixed; inset:0; background:#cc0000; opacity:0; pointer-events:none; z-index:50; transition:opacity .08s; }
+
+/* --- sahne 2: fare ikonu + provoke yazısı --- */
+#scene2 {
+  position:fixed; inset:0; z-index:30;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  pointer-events:none; opacity:0; transition:opacity .6s;
+}
+#scene2.show { opacity:1; pointer-events:all; }
+#cursorBtn {
+  font-size:90px; cursor:pointer; line-height:1;
+  animation:cursorBob 1.4s ease-in-out infinite;
+  filter:drop-shadow(0 0 18px #ffffff88);
+}
+@keyframes cursorBob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+#provoke {
+  margin-top:24px; font-size:22px; font-weight:bold;
+  color:#aaaaaa; letter-spacing:3px;
+  text-shadow:0 0 10px #555;
+  animation:bl2 2.2s ease-in-out infinite;
+}
+@keyframes bl2 { 0%,100%{opacity:.4} 50%{opacity:1} }
+
+/* --- FURKAN --- */
+#furkanWrap {
+  position:fixed; inset:0; z-index:40;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  pointer-events:none;
+}
+#furkan {
+  font-size:clamp(60px,14vw,140px); font-weight:bold; letter-spacing:12px;
+  color:#fff;
+  text-shadow:0 0 40px #ff9900,0 0 80px #ff6600,0 0 120px #ff3300;
+  opacity:0; transform:scale(0) rotate(-8deg);
+  transition:none;
+}
+#furkan.show { animation:furkanIn 1s cubic-bezier(.2,1.5,.4,1) forwards; }
+@keyframes furkanIn {
+  0%{opacity:0;transform:scale(0) rotate(-8deg)}
+  70%{opacity:1;transform:scale(1.12) rotate(2deg)}
+  100%{opacity:1;transform:scale(1) rotate(0)}
+}
+#babaGeldi {
+  margin-top:20px;
+  font-size:clamp(22px,5vw,48px); font-weight:bold; letter-spacing:6px;
+  color:#ffbb44;
+  text-shadow:0 0 20px #ff8800,0 0 50px #ff660066;
+  opacity:0;
+}
+#babaGeldi.show { animation:babaIn 1s ease .6s forwards; }
+@keyframes babaIn { 0%{opacity:0;transform:translateY(30px)} 100%{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="flash"></div>
+
+<!-- Sahne 1: kalp -->
+<div id="ui">
+  <svg id="heartSvg" viewBox="0 0 100 90" xmlns="http://www.w3.org/2000/svg" onclick="onHeartClick()">
+    <defs>
+      <radialGradient id="hg" cx="50%" cy="35%" r="65%">
+        <stop offset="0%" stop-color="#ff3333"/>
+        <stop offset="100%" stop-color="#880000"/>
+      </radialGradient>
+    </defs>
+    <path d="M50 85 C50 85 5 55 5 28 C5 14 16 5 28 5 C36 5 44 10 50 18 C56 10 64 5 72 5 C84 5 95 14 95 28 C95 55 50 85 50 85Z" fill="url(#hg)" stroke="#cc0000" stroke-width="0.5"/>
+    <path d="M30 22 C26 22 22 26 22 32" stroke="#ff8888" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.45"/>
+  </svg>
+  <div id="hint">kalbe dokun ✨</div>
+</div>
+
+<!-- Sahne 2: provoke -->
+<div id="scene2">
+  <div id="cursorBtn" onclick="onProvokeClick()">👆</div>
+  <div id="provoke">zorbalamak istiyorsan tıkla</div>
+</div>
+
+<!-- Sahne 3: FURKAN -->
+<div id="furkanWrap">
+  <div id="furkan">FURKAN</div>
+  <div id="babaGeldi">BABA GELDİ</div>
+</div>
+
+<script>
+const cv   = document.getElementById('cv');
+const cx   = cv.getContext('2d');
+const svg  = document.getElementById('heartSvg');
+const hint = document.getElementById('hint');
+const flash= document.getElementById('flash');
+const scene2   = document.getElementById('scene2');
+const furkanEl = document.getElementById('furkan');
+const babaEl   = document.getElementById('babaGeldi');
+
+let W = cv.width = window.innerWidth;
+let H = cv.height= window.innerHeight;
+window.addEventListener('resize',()=>{ W=cv.width=window.innerWidth; H=cv.height=window.innerHeight; });
+
+/* ========== STATE ========== */
+const sizes = [160,210,265,325,390,460,535,615,700,800];
+const hints = [
+  'kalbe dokun ✨','bir daha 💕','devam et... 💗','büyüyor... 💓',
+  'neredeyse... 💘','çok yakın! ❤️','biraz daha... 🔥','dur durma! 💥',
+  'nefesini tut... 😮','son kez! 💣'
+];
+let clicks=0, exploded=false;
+
+/* ========== PARTICLES ========== */
+const floaters=[], exHearts=[], tParts=[];
+let forming=false, phase2Exploding=false, frame=0;
+
+function redHue()  { return `hsl(${Math.random()*20},100%,${Math.random()*18+44}%)`; }
+function pinkHue() { return `hsl(${Math.random()*30+345},100%,${Math.random()*18+48}%)`; }
+function goldHue() { return `hsl(${Math.random()*30+30},100%,${Math.random()*15+52}%)`; }
+
+function spawnFloat(){
+  const s=Math.random()*9+4;
+  floaters.push({ x:Math.random()*W, y:H+20, vx:(Math.random()-.5)*1.2, vy:-(Math.random()*1.5+0.8),
+    s, alpha:1, color:pinkHue(), rot:Math.random()*Math.PI*2, rotV:(Math.random()-.5)*.04 });
+}
+setInterval(()=>{ if(!exploded) spawnFloat(); },220);
+
+function spawnEx(x,y,big,colorFn){
+  const cf = colorFn||pinkHue;
+  const s=big?(Math.random()*28+14):(Math.random()*10+4);
+  const a=Math.random()*Math.PI*2;
+  const sp=big?(Math.random()*9+5):(Math.random()*3+1);
+  exHearts.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-(big?6:2),
+    s, alpha:1, color:cf(), rot:Math.random()*Math.PI*2,
+    rotV:(Math.random()-.5)*.16, fade:big?.006:.013 });
+}
+
+/* ========== TEXT POINTS ========== */
+function getLetterPoints(text, fontSize, yOff){
+  const oc=document.createElement('canvas');
+  oc.width=Math.min(W*.95,1000); oc.height=fontSize*2.2;
+  const c=oc.getContext('2d');
+  c.fillStyle='#fff';
+  c.font=`bold ${fontSize}px Georgia,serif`;
+  c.textAlign='center'; c.textBaseline='middle';
+  c.fillText(text, oc.width/2, fontSize);
+  const d=c.getImageData(0,0,oc.width,oc.height).data;
+  const step=Math.max(5,Math.floor(fontSize/14));
+  const pts=[];
+  for(let y=0;y<oc.height;y+=step)
+    for(let x=0;x<oc.width;x+=step)
+      if(d[(y*oc.width+x)*4+3]>128) pts.push({x,y});
+  return {pts,w:oc.width,h:oc.height};
+}
+
+/* ========== SAHNE 1 → DİCLE ========== */
+function buildDicle(){
+  const fontSize=Math.min(W*.22,160);
+  const {pts,w,h}=getLetterPoints('DİCLE',fontSize);
+  const ox=W/2-w/2, oy=H/2-h/2;
+  tParts.length=0;
+  pts.slice().sort(()=>Math.random()-.5).forEach((p,i)=>{
+    const tx=ox+p.x, ty=oy+p.y;
+    const angle=Math.random()*Math.PI*2;
+    const dist=Math.random()*Math.max(W,H)*.65+250;
+    tParts.push({
+      x:W/2+Math.cos(angle)*dist, y:H/2+Math.sin(angle)*dist,
+      tx,ty, heartSize:Math.random()*14+8, targetR:Math.random()*3.5+2,
+      color:redHue(), alpha:0,
+      speed:Math.random()*.018+.007,
+      delay:i*1.2+Math.random()*40,
+      rot:Math.random()*Math.PI*2, rotV:(Math.random()-.5)*.18,
+      morph:0, arrived:false, isDicle:true,
+      twinkle:Math.random()*Math.PI*2, twinkleSpd:Math.random()*.05+.02
+    });
+  });
+  forming=true;
+
+  /* Tüm parçacıklar yerine oturduğunda sahne 2'yi göster */
+  const maxDelay = tParts.reduce((m,p)=>Math.max(m,p.delay),0);
+  const estMs = (maxDelay/60)*1000 + 3500;
+  setTimeout(showScene2, estMs);
+}
+
+/* ========== SAHNE 2 GÖSTER ========== */
+function showScene2(){
+  scene2.classList.add('show');
+}
+
+/* ========== SAHNE 2 TIKLA → DİCLE PATLAT ========== */
+function onProvokeClick(){
+  if(phase2Exploding) return;
+  phase2Exploding=true;
+  scene2.style.pointerEvents='none';
+  scene2.style.opacity='0';
+
+  /* DİCLE parçacıklarını patlat: mevcut konumlarından fırlat */
+  tParts.forEach(p=>{
+    const a=Math.random()*Math.PI*2;
+    const sp=Math.random()*12+6;
+    exHearts.push({
+      x:p.tx, y:p.ty,
+      vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-4,
+      s:Math.random()*10+5, alpha:1,
+      color:redHue(),
+      rot:Math.random()*Math.PI*2, rotV:(Math.random()-.5)*.2,
+      fade:.009
+    });
+  });
+  tParts.length=0; forming=false;
+
+  /* Ekstra patlama */
+  for(let i=0;i<160;i++) spawnEx(W/2,H/2,true,redHue.bind(null));
+  for(let i=0;i<80;i++)  spawnEx(W/2,H/2,false,redHue.bind(null));
+
+  flash.style.opacity='.6';
+  setTimeout(()=>flash.style.opacity='0',200);
+
+  /* FURKAN + BABA GELDİ */
+  setTimeout(()=>{
+    furkanEl.classList.add('show');
+    babaEl.classList.add('show');
+
+    /* Altın kalpler yağsın */
+    setInterval(()=>{
+      spawnEx(Math.random()*W, Math.random()*H*.3, Math.random()>.5, goldHue);
+      spawnEx(Math.random()*W, H+20, false, goldHue);
+    },80);
+  },500);
+}
+
+/* ========== DRAW HELPERS ========== */
+function heartPath(c,x,y,s){
+  c.beginPath();
+  for(let i=0;i<=60;i++){
+    const t=(i/60)*Math.PI*2;
+    const px=s*16*Math.pow(Math.sin(t),3)*.06;
+    const py=-s*(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))*.06;
+    i===0?c.moveTo(x+px,y+py):c.lineTo(x+px,y+py);
+  }
+  c.closePath();
+}
+function drawHeart(c,x,y,s,alpha,color,rot){
+  c.save(); c.translate(x,y); c.rotate(rot);
+  c.globalAlpha=alpha; c.fillStyle=color;
+  heartPath(c,0,0,s); c.fill(); c.restore();
+}
+function drawGlowDot(c,x,y,r,alpha,color){
+  c.save(); c.globalAlpha=alpha;
+  c.shadowBlur=10; c.shadowColor=color; c.fillStyle=color;
+  c.beginPath(); c.arc(x,y,r,0,Math.PI*2); c.fill(); c.restore();
+}
+
+/* ========== MAIN LOOP ========== */
+function loop(){
+  const bg=cx.createRadialGradient(W*.4,H*.4,0,W*.5,H*.5,Math.max(W,H)*.75);
+  bg.addColorStop(0,'#1c1c1e'); bg.addColorStop(.4,'#111112'); bg.addColorStop(1,'#0a0a0b');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  frame++;
+
+  /* floaters */
+  for(let i=floaters.length-1;i>=0;i--){
+    const p=floaters[i];
+    p.x+=p.vx; p.y+=p.vy; p.alpha-=.004; p.rot+=p.rotV;
+    if(p.y<-30||p.alpha<=0){floaters.splice(i,1);continue;}
+    drawHeart(cx,p.x,p.y,p.s,p.alpha,p.color,p.rot);
+  }
+
+  /* explosion hearts */
+  for(let i=exHearts.length-1;i>=0;i--){
+    const p=exHearts[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=.08;
+    p.alpha-=p.fade; p.rot+=p.rotV;
+    if(p.alpha<=0){exHearts.splice(i,1);continue;}
+    drawHeart(cx,p.x,p.y,p.s,p.alpha,p.color,p.rot);
+  }
+
+  /* dicle forming */
+  if(forming){
+    tParts.forEach(p=>{
+      if(frame<p.delay) return;
+      if(p.alpha<1) p.alpha=Math.min(1,p.alpha+.025);
+      if(!p.arrived){
+        p.x+=(p.tx-p.x)*p.speed;
+        p.y+=(p.ty-p.y)*p.speed;
+        p.rot+=p.rotV;
+        const d=Math.hypot(p.tx-p.x,p.ty-p.y);
+        p.morph=Math.max(0,1-d/80);
+        if(d<1.5){p.x=p.tx;p.y=p.ty;p.arrived=true;p.morph=1;}
+      }
+      p.twinkle+=p.twinkleSpd;
+      const twA=p.alpha*(0.65+0.35*Math.sin(p.twinkle));
+      if(p.morph<0.5){
+        drawHeart(cx,p.x,p.y,Math.max(1,p.heartSize*(1-p.morph*1.5)),twA,p.color,p.arrived?0:p.rot);
+      } else {
+        drawGlowDot(cx,p.x,p.y,p.targetR,twA,p.color);
+      }
+    });
+  }
+
+  requestAnimationFrame(loop);
+}
+loop();
+
+/* ========== KALP TIKLA ========== */
+function onHeartClick(){
+  if(exploded) return;
+  const mcx=W/2, mcy=H/2;
+  if(clicks<sizes.length-1){
+    clicks++;
+    svg.style.width=sizes[clicks]+'px';
+    svg.style.height=sizes[clicks]+'px';
+    hint.textContent=hints[clicks];
+    for(let i=0;i<12+clicks*8;i++) spawnEx(mcx,mcy,false,pinkHue);
+  } else {
+    exploded=true;
+    svg.style.pointerEvents='none';
+    hint.style.opacity='0';
+    svg.classList.add('boom');
+    setTimeout(()=>{
+      for(let i=0;i<200;i++) spawnEx(mcx,mcy,true,pinkHue);
+      for(let i=0;i<100;i++) spawnEx(mcx,mcy,false,pinkHue);
+      flash.style.opacity='.45';
+      setTimeout(()=>flash.style.opacity='0',180);
+      svg.style.display='none';
+      hint.style.display='none';
+      setTimeout(()=>{
+        buildDicle();
+        setInterval(()=>spawnEx(mcx+(Math.random()-.5)*W,mcy+(Math.random()-.5)*H,Math.random()>.4,pinkHue),120);
+      },500);
+    },550);
+  }
+}
+</script>
+</body>
+</html>
